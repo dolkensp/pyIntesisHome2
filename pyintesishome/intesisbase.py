@@ -75,46 +75,76 @@ class IntesisBase:
 
     async def _send_command(self, command: str):
         try:
-            _LOGGER.debug("Sending command %s", command)
+            _LOGGER.debug("Preparing to send command: %s", command)
             self._received_response.clear()
-            if self._writer:
-                self._writer.write(command.encode("ascii"))
-                await self._writer.drain()
-                timeout = 5.0
-                start_time = asyncio.get_event_loop().time()
-                while not self._received_response.is_set():
-                    if asyncio.get_event_loop().time() - start_time > timeout:
-                        _LOGGER.error("Timeout waiting for response")
-                        await self.stop()
-                        break
-                    await asyncio.sleep(0.1)
+            if not self._writer:
+                _LOGGER.error("No writer available. Cannot send command.")
+                return
+            _LOGGER.debug("Writer state: %r", self._writer)
+            encoded_command = command.encode("ascii")
+            _LOGGER.debug("Encoded command: %r (length: %d)", encoded_command, len(encoded_command))
+            self._writer.write(encoded_command)
+            await self._writer.drain()
+            _LOGGER.debug("Command sent and drained. Waiting for response event.")
+            timeout = 15.0
+            start_time = asyncio.get_event_loop().time()
+            while not self._received_response.is_set():
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed > timeout:
+                    _LOGGER.error("Timeout waiting for response after %.2f seconds", elapsed)
+                    await self.stop()
+                    break
+                _LOGGER.debug("Still waiting for response event. Elapsed: %.2f seconds", elapsed)
+                await asyncio.sleep(0.1)
+            if self._received_response.is_set():
+                _LOGGER.debug("Response event set! Command succeeded.")
+            else:
+                _LOGGER.error("Response event was never set. Command failed.")
         except OSError as exc:
             _LOGGER.error("%s Exception. %s / %s", type(exc), exc.args, exc)
         except Exception as exc:
-            _LOGGER.error("Unexpected error: %s", exc)
+            _LOGGER.error("Unexpected error in _send_command: %s", exc)
             await self.stop()
 
     async def _data_received(self):
         try:
             while self._reader:
-                raw_data = await self._reader.readuntil(self._data_delimiter)
+                _LOGGER.debug("Waiting to read data with delimiter %r", self._data_delimiter)
+                try:
+                    raw_data = await self._reader.readuntil(self._data_delimiter)
+                    _LOGGER.debug("Raw data received: %r (length: %d)", raw_data, len(raw_data) if raw_data else 0)
+                except IncompleteReadError as ire:
+                    _LOGGER.error(
+                        "IncompleteReadError: expected delimiter %r, got partial data: %r (length: %d)",
+                        self._data_delimiter,
+                        ire.partial,
+                        len(ire.partial) if ire.partial else 0
+                    )
+                    _LOGGER.error("Reader state: %r", self._reader)
+                    _LOGGER.error("Connection status: connected=%s, connecting=%s", self._connected, self._connecting)
+                    raise
                 if not raw_data:
+                    _LOGGER.debug("No data received, breaking loop.")
                     break
-                data = raw_data.decode("ascii")
+                try:
+                    data = raw_data.decode("ascii")
+                except Exception as decode_exc:
+                    _LOGGER.error("Failed to decode raw_data: %r, error: %s", raw_data, decode_exc)
+                    continue
                 _LOGGER.debug("Received: %s", data)
 
                 await self._parse_response(data)
-                
+
                 if not self._received_response.is_set():
                     _LOGGER.debug("Resolving set_value's await")
                     self._received_response.set()
-                    
 
         except IncompleteReadError:
-            _LOGGER.debug(
-                "pyIntesisHome lost connection to the %s server", self._device_type
+            _LOGGER.error(
+                "pyIntesisHome lost connection to the %s server due to IncompleteReadError.", self._device_type
             )
         except asyncio.CancelledError:
+            _LOGGER.debug("_data_received task was cancelled.")
             pass
         except (
             TimeoutError,
@@ -126,6 +156,8 @@ class IntesisBase:
                 self._device_type,
                 exc,
             )
+        except Exception as exc:
+            _LOGGER.error("Unexpected error in _data_received: %s", exc)
         finally:
             self._connected = False
             self._connecting = False
