@@ -1,4 +1,4 @@
-""" Helpers for pyintesishome """
+""" Helpers for pyintesishome2 """
 
 
 def twos_complement_16bit(val):

@@ -18,7 +18,7 @@ from .const import (
 )
 from .helpers import twos_complement_16bit, uint32
 
-_LOGGER = logging.getLogger("pyintesishome")
+_LOGGER = logging.getLogger("pyintesishome2")
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
@@ -141,7 +141,7 @@ class IntesisBase:
 
         except IncompleteReadError:
             _LOGGER.error(
-                "pyIntesisHome lost connection to the %s server due to IncompleteReadError.", self._device_type
+                "pyintesishome2 lost connection to the %s server due to IncompleteReadError.", self._device_type
             )
         except asyncio.CancelledError:
             _LOGGER.debug("_data_received task was cancelled.")
@@ -152,7 +152,7 @@ class IntesisBase:
             OSError,
         ) as exc:
             _LOGGER.error(
-                "PyIntesisHome lost connection to the %s server. Exception: %s",
+                "pyintesishome2 lost connection to the %s server. Exception: %s",
                 self._device_type,
                 exc,
             )

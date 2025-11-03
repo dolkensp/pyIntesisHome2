@@ -1,4 +1,4 @@
-""" Main submodule for pyintesishome """
+""" Main submodule for pyintesishome2 """
 import asyncio
 import json
 import logging
@@ -10,12 +10,12 @@ from .const import API_URL, API_VER, DEVICE_INTESISHOME, INTESIS_CMD_STATUS
 from .exceptions import IHAuthenticationError, IHConnectionError
 from .intesisbase import IntesisBase
 
-_LOGGER = logging.getLogger("pyintesishome")
+_LOGGER = logging.getLogger("pyintesishome2")
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
 class IntesisHome(IntesisBase):
-    """pyintesishome cloud class"""
+    """pyintesishome2 cloud class"""
 
     def __init__(
         self,

@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from pyintesishome import IntesisHome
+from pyintesishome2 import IntesisHome
 
 logging.basicConfig(
     level=logging.INFO,

@@ -3,15 +3,15 @@ import asyncio
 import logging
 import sys
 
-from pyintesishome import IntesisHome, IntesisHomeLocal
-from pyintesishome.const import (
+from pyintesishome2 import IntesisHome, IntesisHomeLocal
+from pyintesishome2.const import (
     DEVICE_AIRCONWITHME,
     DEVICE_ANYWAIR,
     DEVICE_INTESISHOME,
     DEVICE_INTESISHOME_LOCAL,
 )
 
-_LOGGER = logging.getLogger("pyintesishome")
+_LOGGER = logging.getLogger("pyintesishome2")
 
 
 async def main(loop):

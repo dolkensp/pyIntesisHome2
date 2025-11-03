@@ -6,7 +6,7 @@ from datetime import datetime
 
 import paho.mqtt.publish as publish
 
-from pyintesishome import IntesisHome
+from pyintesishome2 import IntesisHome
 
 logging.basicConfig(
     level=logging.INFO,
@@ -169,7 +169,7 @@ def aquarea_to_domoticz(
     print(msgs)
 
     print(broker)
-    rc = publish.multiple(msgs, hostname=broker, port=port, client_id="pyIntesisHome2")
+    rc = publish.multiple(msgs, hostname=broker, port=port, client_id="pyintesishome2")
     print(date.strftime("%Y-%m-%d %H:%M:%S: ") + "Publish: %s" % (rc))
 
 

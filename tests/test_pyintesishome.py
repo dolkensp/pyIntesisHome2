@@ -1,11 +1,11 @@
-"""Tests for pyintesishome."""
+"""Tests for pyintesishome2."""
 import asyncio
 
 import aiohttp
 import pytest
 
-from pyintesishome import IntesisHome, IntesisHomeLocal
-from pyintesishome.const import API_URL, DEVICE_INTESISHOME
+from pyintesishome2 import IntesisHome, IntesisHomeLocal
+from pyintesishome2.const import API_URL, DEVICE_INTESISHOME
 
 from . import mock_aioresponse  # noqa: F401
 from . import (
@@ -54,7 +54,7 @@ asyncio.run(async_setup_controllers())
 
 
 @pytest.mark.parametrize("controller", controllers.values(), ids=controllers.keys())
-class TestPyIntesisHome:
+class TestPyIntesisHome2:
     @pytest.fixture(autouse=True)
     async def _setup(self, mock_aioresponse, loop):  # noqa: F811
         mock_aioresponse.post(

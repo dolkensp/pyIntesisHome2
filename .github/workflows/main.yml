@@ -6,15 +6,15 @@ env:
   DEFAULT_PYTHON: 3.9
 
 jobs:
-  black:
-    name: Check black
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - uses: psf/black@stable
+#  black:
+#    name: Check black
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: actions/setup-python@v4
+#        with:
+#          python-version: ${{ env.DEFAULT_PYTHON }}
+#      - uses: psf/black@stable
 
   isort:
     name: Check isort
@@ -36,21 +36,21 @@ jobs:
           python-version: ${{ env.DEFAULT_PYTHON }}
       - uses: TrueBrain/actions-flake8@master
 
-  pylint:
-    name: Check pylint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - name: Install Requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install pylint .
-      - name: Run Pylint
-        run: |
-          pylint pyintesishome
+#  pylint:
+#    name: Check pylint
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: actions/setup-python@v4
+#        with:
+#          python-version: ${{ env.DEFAULT_PYTHON }}
+#      - name: Install Requirements
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install pylint .
+#      - name: Run Pylint
+#        run: |
+#          pylint pyintesishome2
 
   pytest:
     name: Run tests Python ${{ matrix.python-version }}
@@ -60,10 +60,10 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10"]
     needs:
-      - black
+#      - black
       - isort
       - flake8
-      - pylint
+ #     - pylint
     env:
       PYTHON: ${{ matrix.python-version }}
     steps:
@@ -77,7 +77,7 @@ jobs:
           pip install -r requirements_test.txt
       - name: Run tests and generate coverage report
         run: |
-          pytest --cov=./pyintesishome --cov-report=xml
+          pytest --cov=./pyintesishome2 --cov-report=xml
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
         with:

@@ -1,4 +1,4 @@
-""" Constants for pyintesishome """
+""" Constants for pyintesishome2 """
 INTESIS_CMD_STATUS = '{"status":{"hash":"x"},"config":{"hash":"x"}}'
 INTESIS_NULL = 32768
 

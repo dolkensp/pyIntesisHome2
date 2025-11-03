@@ -1,4 +1,4 @@
-"""Main submodule for pyintesishome."""
+"""Main submodule for pyintesishome2."""
 
 import asyncio
 import logging
@@ -19,12 +19,12 @@ from .const import (
 from .exceptions import IHAuthenticationError, IHConnectionError
 from .intesisbase import IntesisBase
 
-_LOGGER = logging.getLogger("pyintesishome")
+_LOGGER = logging.getLogger("pyintesishome2")
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
 class IntesisHomeLocal(IntesisBase):
-    """pyintesishome local class."""
+    """pyintesishome2 local class."""
 
     def __init__(self, host, username, password, loop=None, websession=None) -> None:
         """Constructor"""

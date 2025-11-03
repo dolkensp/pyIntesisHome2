@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List
 
-from pyintesishome.intesisbase import IntesisBase
+from pyintesishome2.intesisbase import IntesisBase
 
 from .const import (
     DEVICE_INTESISBOX,
@@ -21,7 +21,7 @@ from .const import (
 )
 from .helpers import uint32
 
-_LOGGER = logging.getLogger("pyintesishome")
+_LOGGER = logging.getLogger("pyintesishome2")
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
 
