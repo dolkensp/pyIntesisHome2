@@ -25,6 +25,11 @@ class IntesisHome(IntesisBase):
         websession=None,
         device_type=DEVICE_INTESISHOME,
     ):
+        _LOGGER.info(
+            "Initialising IntesisHome client for %s (controller=%s)",
+            device_type,
+            username,
+        )
         super().__init__(
             device_type=device_type,
             username=username,
@@ -42,6 +47,12 @@ class IntesisHome(IntesisBase):
     async def _parse_response(self, decoded_data):
         _LOGGER.debug("%s API Received: %s", self._device_type, decoded_data)
         resp = json.loads(decoded_data)
+        _LOGGER.info(
+            "Processing %s response command %s with data %s",
+            self._device_type,
+            resp.get("command"),
+            resp.get("data"),
+        )
         # Ensure any pending command awaiters are released before invoking callbacks
         if not self._received_response.is_set():
             _LOGGER.debug("Setting _received_response event")
@@ -58,6 +69,12 @@ class IntesisHome(IntesisBase):
                 await self._send_update_callback()
         elif resp["command"] == "status":
             # Value has changed
+            _LOGGER.info(
+                "Received status update for device %s (uid %s) on %s",
+                resp["data"].get("deviceId"),
+                resp["data"].get("uid"),
+                self._device_type,
+            )
             self._update_device_state(
                 resp["data"]["deviceId"],
                 resp["data"]["uid"],
@@ -78,18 +95,23 @@ class IntesisHome(IntesisBase):
         try:
             while True:
                 await asyncio.sleep(120)
-                _LOGGER.debug("sending keepalive to {self._device_type}")
+                _LOGGER.info("Sending keepalive to %s", self._device_type)
                 device_id = str(next(iter(self._devices)))
                 message = (
                     f'{{"command":"get","data":{{"deviceId":{device_id},"uid":10}}}}'
                 )
                 await self._send_command(message)
         except asyncio.CancelledError:
-            _LOGGER.debug("Cancelled the keepalive task")
+            _LOGGER.info("Cancelled the keepalive task for %s", self._device_type)
 
     async def connect(self):
         """Public method for connecting to IntesisHome/Airconwithme API"""
         if not self._connected and not self._connecting:
+            _LOGGER.info(
+                "Starting connection flow to %s API for controller %s",
+                self._device_type,
+                self._controller_id or self._username,
+            )
             self._connecting = True
             self._connection_retries = 0
 
@@ -97,6 +119,7 @@ class IntesisHome(IntesisBase):
             await self._cancel_task_if_exists(self._receive_task)
 
             try:
+                _LOGGER.info("Requesting authentication token for %s", self._device_type)
                 self._auth_token = await self.poll_status()
             except IHAuthenticationError as exc:
                 _LOGGER.error("Error connecting to IntesisHome API: %s", exc)
@@ -107,6 +130,12 @@ class IntesisHome(IntesisBase):
 
             _LOGGER.debug(
                 "Opening connection to %s API at %s:%i",
+                self._device_type,
+                self._cmd_server,
+                self._cmd_server_port,
+            )
+            _LOGGER.info(
+                "Connecting to %s command server %s:%s",
                 self._device_type,
                 self._cmd_server,
                 self._cmd_server_port,
@@ -128,6 +157,7 @@ class IntesisHome(IntesisBase):
                 self._keepalive_task = self._event_loop.create_task(
                     self._send_keepalive()
                 )
+                _LOGGER.info("Successfully connected to %s", self._device_type)
             # Get authentication token over HTTP POST
             except (  # pylint: disable=broad-except
                 ConnectionRefusedError,
@@ -145,6 +175,11 @@ class IntesisHome(IntesisBase):
     async def poll_status(self, sendcallback=False):
         """Public method to query IntesisHome for state of device.
         Notifies subscribers if sendCallback True."""
+        _LOGGER.info(
+            "Polling status for %s (controller=%s)",
+            self._device_type,
+            self._controller_id or self._username,
+        )
         get_status = {
             "username": self._username,
             "password": self._password,
@@ -174,6 +209,12 @@ class IntesisHome(IntesisBase):
 
             config = status_response.get("config")
             if config:
+                _LOGGER.info(
+                    "Received configuration for %s: server=%s:%s",
+                    self._device_type,
+                    config.get("serverIP"),
+                    config.get("serverPort"),
+                )
                 self._cmd_server = config.get("serverIP")
                 self._cmd_server_port = config.get("serverPort")
                 self._auth_token = config.get("token")
@@ -193,6 +234,12 @@ class IntesisHome(IntesisBase):
                         "widgets": device["widgets"],
                         "model": device["modelId"],
                     }
+                    _LOGGER.info(
+                        "Registered device %s (%s) for %s",
+                        device["id"],
+                        device["name"],
+                        self._device_type,
+                    )
                     _LOGGER.debug(repr(self._devices))
 
             # Update device status
@@ -209,6 +256,11 @@ class IntesisHome(IntesisBase):
                 self._update_device_state(device_id, status["uid"], status["value"])
 
             if sendcallback:
+                _LOGGER.info(
+                    "Sending status callback for device %s on %s",
+                    device_id,
+                    self._device_type,
+                )
                 await self._send_update_callback(device_id=str(device_id))
 
         return self._auth_token
@@ -219,6 +271,13 @@ class IntesisHome(IntesisBase):
         message = (
             '{"command":"set","data":{"deviceId":%s,"uid":%i,"value":%i,"seqNo":0}}'
             % (device_id, uid, value)
+        )
+        _LOGGER.info(
+            "Queueing set command for device %s uid %s with value %s on %s",
+            device_id,
+            uid,
+            value,
+            self._device_type,
         )
         await self._send_command(message)
 

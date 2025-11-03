@@ -1,5 +1,6 @@
 """Base class for Intesis controllers."""
 import asyncio
+import json
 import logging
 from asyncio.exceptions import IncompleteReadError
 from asyncio.streams import StreamReader, StreamWriter
@@ -35,6 +36,8 @@ class IntesisBase:
         device_type=DEVICE_INTESISHOME,
     ) -> None:
         """Initialize IntesisBox controller."""
+        _LOGGER.info("Initialising Intesis controller base for device type %s", device_type)
+
         # Select correct API for device type
         self._username = username
         self._password = password
@@ -58,14 +61,14 @@ class IntesisBase:
         self._data_delimiter = b"}}"
 
         if loop:
-            _LOGGER.debug("Using the provided event loop")
+            _LOGGER.info("Using the provided event loop for device type %s", device_type)
             self._event_loop = loop
         else:
-            _LOGGER.debug("Getting the running loop from asyncio")
+            _LOGGER.info("Obtaining running event loop for device type %s", device_type)
             self._event_loop = asyncio.get_running_loop()
 
         if not self._web_session:
-            _LOGGER.debug("Creating new websession")
+            _LOGGER.info("Creating new aiohttp session for device type %s", device_type)
             self._web_session = aiohttp.ClientSession()
             self._own_session = True
 
@@ -75,6 +78,19 @@ class IntesisBase:
 
     async def _send_command(self, command: str):
         try:
+            try:
+                payload = json.loads(command)
+                data = dict(payload.get("data", {}))
+                if "token" in data:
+                    data["token"] = "***"
+                _LOGGER.info(
+                    "Sending %s command to %s with data %s",
+                    payload.get("command"),
+                    self._device_type,
+                    data,
+                )
+            except json.JSONDecodeError:
+                _LOGGER.info("Sending raw command to %s: %s", self._device_type, command)
             _LOGGER.debug("Sending command %s", command)
             self._received_response.clear()
             if self._writer:
@@ -101,10 +117,24 @@ class IntesisBase:
                 if not raw_data:
                     break
                 data = raw_data.decode("ascii")
+                try:
+                    payload = json.loads(data)
+                    _LOGGER.info(
+                        "Received %s command from %s with data %s",
+                        payload.get("command"),
+                        self._device_type,
+                        payload.get("data"),
+                    )
+                except json.JSONDecodeError:
+                    _LOGGER.info(
+                        "Received undecodable payload from %s: %s",
+                        self._device_type,
+                        data,
+                    )
                 _LOGGER.debug("Received: %s", data)
 
                 await self._parse_response(data)
-                
+
                 if not self._received_response.is_set():
                     _LOGGER.debug("Resolving set_value's await")
                     self._received_response.set()
@@ -134,28 +164,49 @@ class IntesisBase:
     def _update_device_state(self, device_id, uid, value):
         """Internal method to update the state table of IntesisHome/Airconwithme devices."""
         device_id = str(device_id)
+        if device_id not in self._devices:
+            _LOGGER.info(
+                "Creating state container for device %s on %s due to update",
+                device_id,
+                self._device_type,
+            )
+            self._devices[device_id] = {}
 
+        mapped_name = f"unknown_uid_{uid}"
         if uid in INTESIS_MAP:
             # If the value is null (32768), set as None
             if value == INTESIS_NULL:
-                self._devices[device_id][INTESIS_MAP[uid]["name"]] = None
+                mapped_name = INTESIS_MAP[uid]["name"]
+                self._devices[device_id][mapped_name] = None
             else:
                 # Translate known UIDs to configuration item names
                 value_map = INTESIS_MAP[uid].get("values")
+                mapped_name = INTESIS_MAP[uid]["name"]
                 if value_map:
-                    self._devices[device_id][INTESIS_MAP[uid]["name"]] = value_map.get(
-                        value, value
-                    )
+                    self._devices[device_id][mapped_name] = value_map.get(value, value)
                 else:
-                    self._devices[device_id][INTESIS_MAP[uid]["name"]] = value
+                    self._devices[device_id][mapped_name] = value
         else:
             # Log unknown UIDs
-            self._devices[device_id][f"unknown_uid_{uid}"] = value
+            self._devices[device_id][mapped_name] = value
+        _LOGGER.info(
+            "Updated state for device %s (uid %s) on %s to %s",
+            device_id,
+            uid,
+            self._device_type,
+            self._devices[device_id].get(mapped_name),
+        )
 
     def _update_rssi(self, device_id, rssi):
         """Internal method to update the wireless signal strength."""
         if rssi and str(device_id) in self._devices:
             self._devices[str(device_id)]["rssi"] = rssi
+            _LOGGER.info(
+                "Updated RSSI for device %s on %s to %s",
+                device_id,
+                self._device_type,
+                rssi,
+            )
 
     async def connect(self):
         """Public method for connecting to API"""
@@ -163,21 +214,30 @@ class IntesisBase:
 
     async def stop(self):
         """Public method for shutting down connectivity."""
+        _LOGGER.info("Stopping controller for device type %s", self._device_type)
         self._connected = False
         await self._cancel_task_if_exists(self._receive_task)
         await self._cancel_task_if_exists(self._keepalive_task)
         if self._writer:
+            _LOGGER.info("Closing TCP writer for %s", self._device_type)
             self._writer.close()
             await self._writer.wait_closed()
             self._writer = None
 
         if self._own_session and self._web_session:
+            _LOGGER.info("Closing aiohttp session for %s", self._device_type)
             await self._web_session.close()
             self._web_session = None
 
     @staticmethod
     async def _cancel_task_if_exists(task: asyncio.Task):
         if task:
+            task_name = getattr(task, "get_name", None)
+            if callable(task_name):
+                task_name = task.get_name()
+            if not task_name:
+                task_name = repr(task)
+            _LOGGER.info("Cancelling task %s", task_name)
             task.cancel()
             try:
                 await task
@@ -213,6 +273,13 @@ class IntesisBase:
             mode_control = "operating_mode"
 
         if mode in COMMAND_MAP[mode_control]["values"]:
+            _LOGGER.info(
+                "Setting %s for device %s on %s to %s",
+                mode_control,
+                device_id,
+                self._device_type,
+                mode,
+            )
             await self._set_value(
                 device_id,
                 COMMAND_MAP[mode_control]["uid"],
@@ -222,6 +289,12 @@ class IntesisBase:
     async def set_preset_mode(self, device_id, preset: str):
         """Internal method for setting the mode with a string value."""
         if preset in COMMAND_MAP["climate_working_mode"]["values"]:
+            _LOGGER.info(
+                "Setting preset mode for device %s on %s to %s",
+                device_id,
+                self._device_type,
+                preset,
+            )
             await self._set_value(
                 device_id,
                 COMMAND_MAP["climate_working_mode"]["uid"],
@@ -231,24 +304,48 @@ class IntesisBase:
     async def set_temperature(self, device_id, setpoint):
         """Public method for setting the temperature"""
         set_temp = uint32(setpoint * 10)
+        _LOGGER.info(
+            "Setting temperature for device %s on %s to %.1f",
+            device_id,
+            self._device_type,
+            setpoint,
+        )
         await self._set_value(device_id, COMMAND_MAP["setpoint"]["uid"], set_temp)
 
     async def set_fan_speed(self, device_id, fan: str):
         """Public method to set the fan speed"""
         fan_map = self._get_fan_map(device_id)
         map_fan_speed_to_int = {v: k for k, v in fan_map.items()}
+        _LOGGER.info(
+            "Setting fan speed for device %s on %s to %s",
+            device_id,
+            self._device_type,
+            fan,
+        )
         await self._set_value(
             device_id, COMMAND_MAP["fan_speed"]["uid"], map_fan_speed_to_int[fan]
         )
 
     async def set_vertical_vane(self, device_id, vane: str):
         """Public method to set the vertical vane"""
+        _LOGGER.info(
+            "Setting vertical vane for device %s on %s to %s",
+            device_id,
+            self._device_type,
+            vane,
+        )
         await self._set_value(
             device_id, COMMAND_MAP["vvane"]["uid"], COMMAND_MAP["vvane"]["values"][vane]
         )
 
     async def set_horizontal_vane(self, device_id, vane: str):
         """Public method to set the horizontal vane"""
+        _LOGGER.info(
+            "Setting horizontal vane for device %s on %s to %s",
+            device_id,
+            self._device_type,
+            vane,
+        )
         await self._set_value(
             device_id, COMMAND_MAP["hvane"]["uid"], COMMAND_MAP["hvane"]["values"][vane]
         )
@@ -275,6 +372,11 @@ class IntesisBase:
 
     async def set_power_off(self, device_id):
         """Public method to turn off the device asynchronously."""
+        _LOGGER.info(
+            "Turning device %s on %s off",
+            device_id,
+            self._device_type,
+        )
         await self._set_value(
             device_id,
             COMMAND_MAP["power"]["uid"],
@@ -283,6 +385,11 @@ class IntesisBase:
 
     async def set_power_on(self, device_id):
         """Public method to turn on the device asynchronously."""
+        _LOGGER.info(
+            "Turning device %s on %s on",
+            device_id,
+            self._device_type,
+        )
         await self._set_value(
             device_id, COMMAND_MAP["power"]["uid"], COMMAND_MAP["power"]["values"]["on"]
         )
@@ -482,6 +589,13 @@ class IntesisBase:
         """Internal method for setting the generic mode (gen_type in
         {operating_mode, climate_working_mode, tank, etc.}) with a string value"""
         if mode in COMMAND_MAP[gen_type]["values"]:
+            _LOGGER.info(
+                "Setting %s for device %s on %s to %s",
+                gen_type,
+                device_id,
+                self._device_type,
+                mode,
+            )
             self._set_value(
                 device_id,
                 COMMAND_MAP[gen_type]["uid"],
@@ -495,6 +609,13 @@ class IntesisBase:
 
         if min_shift <= value <= max_shift:
             unsigned_value = uint32(value * 10)  # unsigned int 16 bit
+            _LOGGER.info(
+                "Setting %s for device %s on %s to %.1f",
+                name,
+                device_id,
+                self._device_type,
+                value,
+            )
             self._set_value(device_id, COMMAND_MAP[name]["uid"], unsigned_value)
         else:
             raise ValueError(
@@ -543,16 +664,27 @@ class IntesisBase:
     async def _send_update_callback(self, device_id=None):
         """Internal method to notify all update callback subscribers."""
         if self._update_callbacks:
+            _LOGGER.info(
+                "Dispatching update callbacks for %s (device_id=%s)",
+                self._device_type,
+                device_id,
+            )
             for callback in self._update_callbacks:
                 await callback(device_id=device_id)
 
     def add_update_callback(self, method):
         """Public method to add a callback subscriber."""
         self._update_callbacks.append(method)
+        _LOGGER.info(
+            "Added update callback %s for %s", method, self._device_type
+        )
 
     def remove_update_callback(self, method):
         """Public method to add a callback subscriber."""
         self._update_callbacks.remove(method)
+        _LOGGER.info(
+            "Removed update callback %s for %s", method, self._device_type
+        )
 
     def _get_fan_map(self, device_id):
         """Private method to get the fan_map."""
